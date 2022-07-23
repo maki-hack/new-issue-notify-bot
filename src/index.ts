@@ -1,5 +1,6 @@
 import * as express from "express";
 import * as line from "@line/bot-sdk";
+import { RakutenBooksAPI } from "./rakuten";
 require("dotenv").config();
 
 async function main() {
@@ -12,6 +13,7 @@ async function main() {
     };
 
     const lineClient = new line.Client(lineClientConfig);
+    const rakutenBooksAPI = new RakutenBooksAPI(process.env.RAKUTEN_APP_ID!);
 
     app.post(
       "/callback",
@@ -25,9 +27,40 @@ async function main() {
           console.log(event);
 
           if (event.type === "message") {
+            let replyText = "正しいコマンドを入力してください";
+
+            if (event.message.type === "text") {
+              const { text } = event.message;
+              if (text.trim().endsWith("の発売日を教えて")) {
+                const match = text.match(/(.*)の発売日を教えて$/);
+                if (match) {
+                  const title = match[1];
+
+                  const books = await rakutenBooksAPI.searchBook({
+                    title,
+                    sort: "-releaseDate",
+                  });
+
+                  if (!books.length) {
+                    replyText = "対象の書籍が見つかりませんでした";
+                  } else {
+                    const latest = books[0];
+                    replyText = `${latest.title}の発売日は${latest.salesDate}です`;
+                  }
+
+                  console.log(
+                    books.map((b) => ({
+                      title: b.title,
+                      salesDate: b.salesDate,
+                    }))
+                  );
+                }
+              }
+            }
+
             await lineClient.replyMessage(event.replyToken, {
               type: "text",
-              text: "Hello, world!",
+              text: replyText,
             });
           }
         }
